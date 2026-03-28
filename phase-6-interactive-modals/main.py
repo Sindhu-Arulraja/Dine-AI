@@ -7,8 +7,11 @@ from chromadb.utils import embedding_functions
 from groq import Groq
 from dotenv import load_dotenv
 
+# Setup Absolute Base Dir for Serverless
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Load ENV variables
-load_dotenv()
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 app = FastAPI()
@@ -19,29 +22,30 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 chroma_client = None
 collection = None
 
-def get_chroma_collection():
-    global chroma_client, collection
-    if collection is not None:
-        return collection
-    if os.path.exists("./chroma_db"):
-        try:
-            chroma_client = chromadb.PersistentClient(path="./chroma_db")
-            sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
-            collection = chroma_client.get_collection(name="restaurants", embedding_function=sentence_transformer_ef)
-            print("Connected to ChromaDB successfully.")
-            return collection
-        except Exception as e:
-            print(f"ChromaDB connect error: {e}")
-            return None
-    return None
+# Mount static folder
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
+ef = embedding_functions.DefaultEmbeddingFunction()
+
+# Add a robust function to load Chroma
+def get_chroma_collection():
+    try:
+        # Prevent locking errors by relying on existing path
+        client = chromadb.PersistentClient(path=os.path.join(BASE_DIR, "chroma_db"))
+        col = client.get_collection(name="blr_restaurants_v2", embedding_function=ef)
+        return col
+    except Exception as e:
+        print("Vector DB connection error:", e)
+        return None
+
+# Serve Frontend explicitly
 @app.get("/")
-async def serve_frontend():
-    return FileResponse('static/index.html')
+async def serve_index():
+    return FileResponse(os.path.join(BASE_DIR, "static", "index.html"))
 
 @app.get("/results.html")
 async def serve_results():
-    return FileResponse('static/results.html')
+    return FileResponse(os.path.join(BASE_DIR, "static", "results.html"))
 
 @app.get("/api/catalog-search")
 async def get_catalog(

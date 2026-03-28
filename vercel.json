@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "phase-6-interactive-modals/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "phase-6-interactive-modals/main.py"
+    }
+  ]
+}
