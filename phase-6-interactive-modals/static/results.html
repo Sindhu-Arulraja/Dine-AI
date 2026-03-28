@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DineAI Search Results</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="glow-orb left-orb"></div>
+    <div class="glow-orb right-orb"></div>
+
+    <header style="text-align: center; margin-top: 20px; margin-bottom: 15px;">
+        <h1 class="glass-text">Restaurant Picks <span class="accent">for You</span></h1>
+        <a href="/" class="back-link">&larr; Modify Search Parameters</a>
+    </header>
+
+    <!-- Phase 5 Full Width Catalog Layout relocated to top -->
+    <main class="container" style="max-width: 1400px; padding-top: 10px;">
+        <div id="catalog-grid" class="catalog-grid hidden"></div>
+    </main>
+
+    <!-- Intelligent Modal Overlay -->
+    <div id="restaurant-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button id="close-modal" class="modal-close">&times;</button>
+            
+            <h2 id="modal-name" class="modal-title"></h2>
+            
+            <!-- Dynamic Horizontal Image Gallery -->
+            <div id="modal-gallery" class="modal-gallery"></div>
+            
+            <div class="modal-info-grid">
+                <div class="info-block">
+                    <h4>Cuisine & Cost</h4>
+                    <p id="modal-cuisine" class="accent"></p>
+                    <p id="modal-cost"></p>
+                </div>
+                <div class="info-block">
+                    <h4>Rating Analytics</h4>
+                    <p id="modal-rating" class="rating-highlight"></p>
+                    <p id="modal-votes" class="micro-text"></p>
+                </div>
+                <div class="info-block">
+                    <h4>Logistics</h4>
+                    <p><strong>Prep / Arrival:</strong> ~35 mins (Est)</p>
+                    <p id="modal-phone"></p>
+                </div>
+            </div>
+            
+            <div class="address-block">
+                <h4>Address Verification</h4>
+                <p id="modal-address"></p>
+            </div>
+            
+            <!-- Phase 6 Mini AI Chat -->
+            <div class="ai-ask-box">
+                <h4>Ask Concierge AI</h4>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="ai-question" class="ai-input" placeholder="e.g. Do they have Vegan options?">
+                    <button id="ai-submit-btn" class="ai-btn" onclick="askAI()">Ask AI</button>
+                </div>
+                <div id="ai-answer" class="ai-stream-box hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Setup Modal Logic
+        const modal = document.getElementById("restaurant-modal");
+        const closeModal = document.getElementById("close-modal");
+        closeModal.onclick = () => {
+             modal.classList.remove("active");
+             document.getElementById("ai-answer").classList.add("hidden");
+             document.getElementById("ai-answer").innerHTML = "";
+        };
+        
+        // Phase 6 Ask AI Streaming function
+        async function askAI() {
+            const questionInput = document.getElementById("ai-question");
+            const answerBox = document.getElementById("ai-answer");
+            const btn = document.getElementById("ai-submit-btn");
+            const restaurantName = document.getElementById("modal-name").innerText;
+            
+            if(!questionInput.value) return;
+            
+            answerBox.classList.remove("hidden");
+            answerBox.innerHTML = "<span class='loading-pulse'>AI is analyzing restaurant data...</span>";
+            btn.disabled = true;
+            btn.innerText = "Thinking...";
+            
+            try {
+                const qs = new URLSearchParams({
+                    name: restaurantName,
+                    question: questionInput.value
+                }).toString();
+                
+                const response = await fetch(`/api/ask-restaurant?${qs}`);
+                if (!response.body) throw new Error("Stream not supported");
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullText = "";
+                answerBox.innerHTML = "";
+                
+                while(true) {
+                    const { done, value } = await reader.read();
+                    if(done) break;
+                    
+                    fullText += decoder.decode(value, {stream: true});
+                    
+                    // Simple Live Markdown Parsing
+                    let fmt = fullText.replace(/\*\*([^*]+)\*\*/g, '<strong class="highlight">$1</strong>');
+                    fmt = fmt.replace(/\n\n/g, '<br><br>');
+                    answerBox.innerHTML = fmt;
+                }
+                
+            } catch(e) {
+                answerBox.innerHTML = `<span style="color:#ef4444">Error connecting to AI Concierge.</span>`;
+            }
+            
+            btn.disabled = false;
+            btn.innerText = "Ask AI";
+            questionInput.value = "";
+        }
+        
+        // Setup Grid
+        const grid = document.getElementById("catalog-grid");
+
+        // High-Speed Static Image CDN Mapping
+        // Unsplash Raw CDN links load in under 50ms compared to the 3-second API redirect of LoremFlickr.
+        const FAST_IMAGE_CDN = {
+            "North Indian": ["https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=600&q=80"],
+            "South Indian": ["https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1505253758473-96b7015fcd40?auto=format&fit=crop&w=600&q=80"],
+            "Italian": ["https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1473093295043-cdd814d0e601?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1595295333158-4742f28fbd85?auto=format&fit=crop&w=600&q=80"],
+            "Cafe": ["https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=600&q=80"],
+            "Dessert": ["https://images.unsplash.com/photo-1551024506-0bccd828d307?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1563805042-7684c8a9e9ce?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1550617931-e17a7b70dce2?auto=format&fit=crop&w=600&q=80"],
+            "Fast Food": ["https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1619881589316-58f41f71dfbc?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80"],
+            "Continental": ["https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80"],
+            "Chinese": ["https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80"],
+            "Default": ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=400&q=80", "https://images.unsplash.com/photo-1590846406792-0adc7f928a18?auto=format&fit=crop&w=600&q=80", "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=600&q=80"]
+        };
+
+        function getImages(cuisineTag) {
+            for (let style in FAST_IMAGE_CDN) {
+                if(cuisineTag.toLowerCase().includes(style.toLowerCase())) return FAST_IMAGE_CDN[style];
+            }
+            return FAST_IMAGE_CDN["Default"];
+        }
+
+        // Execute API Search
+        async function fetchCatalog() {
+            const qs = window.location.search;
+            try {
+                const response = await fetch(`/api/catalog-search${qs}`);
+                const data = await response.json();
+                
+                grid.classList.remove("hidden");
+                
+                if(data.status === "success" && data.cards && data.cards.length > 0) {
+                    data.cards.forEach((rest, idx) => {
+                        const delay = idx * 0.1;
+                        const cuisineCategory = rest.cuisines ? rest.cuisines.split(',')[0].trim() : "Default";
+                        
+                        // Phase 6 Optimization: Ultra-fast CDN injection
+                        const images = getImages(cuisineCategory);
+                        const blockImage = images[0];
+
+                        const card = document.createElement("div");
+                        card.className = "restaurant-card catalog-card";
+                        card.style.animationDelay = `${delay}s`;
+                        
+                        card.innerHTML = `
+                            <div class="card-image-wrapper">
+                                <img src="${blockImage}" class="card-image" loading="lazy">
+                            </div>
+                            <div class="card-content-wrapper">
+                                <h4>${rest.name}</h4>
+                                <div class="card-meta">
+                                    <span class="tag cuisine-tag">${cuisineCategory}</span>
+                                    <span class="tag rating-tag">★ ${rest.rating}</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Bind Click to Modal
+                        card.onclick = () => openModal(rest, cuisineCategory, images);
+                        grid.appendChild(card);
+                    });
+                } else {
+                    grid.innerHTML = `<h3 style="color: white; text-align: center; width: 100%;">No Results Found.</h3>`;
+                }
+            } catch (err) {
+                alert("API Search Failed!");
+            }
+        }
+
+        function openModal(restaurantData, cuisineCategory, fastImagesArray) {
+            document.getElementById("modal-name").innerText = restaurantData.name;
+            document.getElementById("modal-cuisine").innerText = restaurantData.cuisines;
+            document.getElementById("modal-cost").innerText = `₹${restaurantData.cost} for two`;
+            document.getElementById("modal-rating").innerText = `★ ${restaurantData.rating}`;
+            document.getElementById("modal-votes").innerText = `Based on ${restaurantData.votes} verified votes`;
+            document.getElementById("modal-phone").innerHTML = `<strong>Contact:</strong> ${restaurantData.phone}`;
+            document.getElementById("modal-address").innerText = restaurantData.address;
+            
+            // Build 3 image gallery dynamically using the blazing fast static CDNs
+            const gallery = document.getElementById("modal-gallery");
+            gallery.innerHTML = `
+                <img src="${fastImagesArray[0]}">
+                <img src="${fastImagesArray[1]}">
+                <img src="${fastImagesArray[2]}">
+            `;
+            
+            // Clear prior ask AI session
+            document.getElementById("ai-answer").classList.add("hidden");
+            document.getElementById("ai-answer").innerHTML = "";
+            document.getElementById("ai-question").value = "";
+
+            modal.classList.add("active");
+        }
+
+        // Boot
+        fetchCatalog();
+    </script>
+</body>
+</html>

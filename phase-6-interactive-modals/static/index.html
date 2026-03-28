@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DineAI Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="glow-orb left-orb"></div>
+    <div class="glow-orb right-orb"></div>
+
+    <main class="container">
+        <header>
+            <h1 class="glass-text">Dine<span class="accent">AI</span></h1>
+            <p class="subtitle">Discover your next amazing meal</p>
+        </header>
+
+        <section class="glass-panel search-card">
+            <h2>Craft Your Culinary Experience</h2>
+            <form id="recommendation-form" class="filter-grid">
+                <!-- Required -->
+                <div class="input-group">
+                    <label for="cuisine">Craving (Cuisine)</label>
+                    <input type="text" id="cuisine" placeholder="e.g. Italian, Sushi">
+                </div>
+                <div class="input-group">
+                    <label for="location">Location</label>
+                    <input type="text" id="location" placeholder="e.g. Indiranagar, Koramangala">
+                </div>
+                <!-- Optional -->
+                <div class="input-group">
+                    <label for="event">Event Vibe</label>
+                    <input type="text" id="event" placeholder="e.g. Romantic Date, Birthday">
+                </div>
+                <div class="input-group">
+                    <label for="budget">Budget</label>
+                    <select id="budget">
+                        <option value="">Any Budget</option>
+                        <option value="low">$ - Cheap Eats</option>
+                        <option value="medium">$$ - Moderate</option>
+                        <option value="high">$$$ - Fine Dining</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="people">Party Size</label>
+                    <input type="number" id="people" placeholder="Optional" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="time">Time of Visit</label>
+                    <input type="time" id="time">
+                </div>
+                
+                <button type="submit" class="submit-btn" id="generate-btn">
+                    <span>Explore Restaurants</span>
+                    <div class="btn-glow"></div>
+                </button>
+            </form>
+        </section>
+
+    </main>
+
+    <script>
+        document.getElementById("recommendation-form").addEventListener("submit", function(e) {
+            e.preventDefault();
+            
+            // Build Params
+            const locationVal = document.getElementById("location").value;
+            const cuisineVal = document.getElementById("cuisine").value;
+            const eventVal = document.getElementById("event").value;
+            const budgetVal = document.getElementById("budget").value;
+            const peopleVal = document.getElementById("people").value;
+            const timeVal = document.getElementById("time").value;
+
+            const qs = new URLSearchParams({
+                location: locationVal, cuisine: cuisineVal, event: eventVal, budget: budgetVal, people: peopleVal, time: timeVal
+            }).toString();
+
+            // Phase 5: Instantly redirect to the standalone Results Catalog Page
+            window.location.href = `/results.html?${qs}`;
+        });
+    </script>
+</body>
+</html>

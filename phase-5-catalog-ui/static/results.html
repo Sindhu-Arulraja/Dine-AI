@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DineAI Search Results</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="glow-orb left-orb"></div>
+    <div class="glow-orb right-orb"></div>
+
+    <header style="text-align: center; margin-top: 20px; margin-bottom: 15px;">
+        <h1 class="glass-text">Restaurant Picks <span class="accent">for You</span></h1>
+        <a href="/" class="back-link">&larr; Modify Search Parameters</a>
+    </header>
+
+    <!-- Phase 5 Full Width Catalog Layout relocated to top -->
+    <main class="container" style="max-width: 1400px; padding-top: 10px;">
+        <div id="catalog-grid" class="catalog-grid hidden"></div>
+    </main>
+
+    <!-- Intelligent Modal Overlay -->
+    <div id="restaurant-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button id="close-modal" class="modal-close">&times;</button>
+            
+            <h2 id="modal-name" class="modal-title"></h2>
+            
+            <!-- Dynamic Horizontal Image Gallery -->
+            <div id="modal-gallery" class="modal-gallery"></div>
+            
+            <div class="modal-info-grid">
+                <div class="info-block">
+                    <h4>Cuisine & Cost</h4>
+                    <p id="modal-cuisine" class="accent"></p>
+                    <p id="modal-cost"></p>
+                </div>
+                <div class="info-block">
+                    <h4>Rating Analytics</h4>
+                    <p id="modal-rating" class="rating-highlight"></p>
+                    <p id="modal-votes" class="micro-text"></p>
+                </div>
+                <div class="info-block">
+                    <h4>Logistics</h4>
+                    <p><strong>Prep / Arrival:</strong> ~35 mins (Est)</p>
+                    <p id="modal-phone"></p>
+                </div>
+            </div>
+            
+            <div class="address-block">
+                <h4>Address Verification</h4>
+                <p id="modal-address"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Setup Modal Logic
+        const modal = document.getElementById("restaurant-modal");
+        const closeModal = document.getElementById("close-modal");
+        closeModal.onclick = () => modal.classList.remove("active");
+        
+        // Setup Grid
+        const grid = document.getElementById("catalog-grid");
+
+        // Execute API Search
+        async function fetchCatalog() {
+            const qs = window.location.search;
+            try {
+                const response = await fetch(`/api/catalog-search${qs}`);
+                const data = await response.json();
+                
+                grid.classList.remove("hidden");
+                
+                if(data.status === "success" && data.cards && data.cards.length > 0) {
+                    data.cards.forEach((rest, idx) => {
+                        const delay = idx * 0.1;
+                        const cuisineCategory = rest.cuisines ? rest.cuisines.split(',')[0].trim() : "food";
+                        const imageUrl = `https://loremflickr.com/400/300/${encodeURIComponent(cuisineCategory)},food/all?random=${idx}`;
+
+                        const card = document.createElement("div");
+                        card.className = "restaurant-card catalog-card";
+                        card.style.animationDelay = `${delay}s`;
+                        
+                        card.innerHTML = `
+                            <div class="card-image-wrapper">
+                                <img src="${imageUrl}" class="card-image" loading="lazy">
+                            </div>
+                            <div class="card-content-wrapper">
+                                <h4>${rest.name}</h4>
+                                <div class="card-meta">
+                                    <span class="tag cuisine-tag">${cuisineCategory}</span>
+                                    <span class="tag rating-tag">★ ${rest.rating}</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Bind Click to Modal
+                        card.onclick = () => openModal(rest, cuisineCategory, idx);
+                        grid.appendChild(card);
+                    });
+                } else {
+                    grid.innerHTML = `<h3 style="color: white; text-align: center; width: 100%;">No Results Found.</h3>`;
+                }
+            } catch (err) {
+                alert("API Search Failed!");
+            }
+        }
+
+        function openModal(restaurantData, cuisineCategory, seed) {
+            document.getElementById("modal-name").innerText = restaurantData.name;
+            document.getElementById("modal-cuisine").innerText = restaurantData.cuisines;
+            document.getElementById("modal-cost").innerText = `₹${restaurantData.cost} for two`;
+            document.getElementById("modal-rating").innerText = `★ ${restaurantData.rating}`;
+            document.getElementById("modal-votes").innerText = `Based on ${restaurantData.votes} verified votes`;
+            document.getElementById("modal-phone").innerHTML = `<strong>Contact:</strong> ${restaurantData.phone}`;
+            document.getElementById("modal-address").innerText = restaurantData.address;
+            
+            // Build 3 image gallery dynamically for the "multiple images" requirement
+            const gallery = document.getElementById("modal-gallery");
+            gallery.innerHTML = `
+                <img src="https://loremflickr.com/600/400/${encodeURIComponent(cuisineCategory)},food/all?random=${seed}1">
+                <img src="https://loremflickr.com/600/400/restaurant,interior/all?random=${seed}2">
+                <img src="https://loremflickr.com/600/400/${encodeURIComponent(restaurantData.name)},plate/all?random=${seed}3">
+            `;
+            
+            modal.classList.add("active");
+        }
+
+        // Boot
+        fetchCatalog();
+    </script>
+</body>
+</html>

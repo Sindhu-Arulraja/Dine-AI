@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI Dining Concierge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="glow-orb left-orb"></div>
+    <div class="glow-orb right-orb"></div>
+
+    <main class="container">
+        <header>
+            <h1 class="glass-text">Dine<span class="accent">AI</span></h1>
+            <p class="subtitle">Your elite culinary concierge</p>
+        </header>
+
+        <section class="glass-panel search-card">
+            <h2>Craft Your Culinary Experience</h2>
+            <form id="recommendation-form" class="filter-grid">
+                <!-- Required -->
+                <div class="input-group">
+                    <label for="cuisine">Craving (Cuisine)</label>
+                    <input type="text" id="cuisine" placeholder="e.g. Italian, Sushi">
+                </div>
+                <div class="input-group">
+                    <label for="location">Location</label>
+                    <input type="text" id="location" placeholder="e.g. Indiranagar, Koramangala">
+                </div>
+                <!-- Optional -->
+                <div class="input-group">
+                    <label for="event">Event Vibe</label>
+                    <input type="text" id="event" placeholder="e.g. Romantic Date, Birthday">
+                </div>
+                <div class="input-group">
+                    <label for="budget">Budget</label>
+                    <select id="budget">
+                        <option value="">Any Budget</option>
+                        <option value="low">$ - Cheap Eats</option>
+                        <option value="medium">$$ - Moderate</option>
+                        <option value="high">$$$ - Fine Dining</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="people">Party Size</label>
+                    <input type="number" id="people" placeholder="Optional" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="time">Time of Visit</label>
+                    <input type="time" id="time">
+                </div>
+                
+                <button type="submit" class="submit-btn" id="generate-btn">
+                    <span>Generate Magic</span>
+                    <div class="btn-glow"></div>
+                </button>
+            </form>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden loading-container">
+            <div class="spinner"></div>
+            <p id="loading-text" class="loading-pulse">Analyzing Vectors...</p>
+        </div>
+
+        <!-- The Phase 3 Two-Column Result Grid -->
+        <section id="status-panel" class="hidden">
+            <h3 class="result-title">Your Concierge Recommendation</h3>
+            
+            <div class="result-grid">
+                <!-- Left Pane: Groq LLM -->
+                <div class="glass-panel llm-pane">
+                    <div id="ai-response" class="markdown-body"></div>
+                </div>
+
+                <!-- Right Pane: ChromaDB Cards -->
+                <div class="match-cards-pane" id="match-cards">
+                    <!-- Cards injected via JS -->
+                </div>
+            </div>
+            
+        </section>
+
+    </main>
+
+    <script>
+        document.getElementById("recommendation-form").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById("generate-btn");
+            const loadingState = document.getElementById("loading-state");
+            const resultPanel = document.getElementById("status-panel");
+            const aiResponseDiv = document.getElementById("ai-response");
+            const cardsContainer = document.getElementById("match-cards");
+            
+            // Initiate Loading State
+            btn.style.transform = "scale(0.95)";
+            btn.disabled = true;
+            resultPanel.classList.add("hidden");
+            loadingState.classList.remove("hidden");
+            aiResponseDiv.innerHTML = "";
+            cardsContainer.innerHTML = "";
+
+            // Build Params
+            const locationVal = document.getElementById("location").value;
+            const cuisineVal = document.getElementById("cuisine").value;
+            const eventVal = document.getElementById("event").value;
+            const budgetVal = document.getElementById("budget").value;
+            const peopleVal = document.getElementById("people").value;
+            const timeVal = document.getElementById("time").value;
+
+            const qs = new URLSearchParams({
+                location: locationVal, cuisine: cuisineVal, event: eventVal, budget: budgetVal, people: peopleVal, time: timeVal
+            }).toString();
+
+            try {
+                const response = await fetch(`/api/ai-recommendation?${qs}`);
+                if (!response.body) throw new Error("ReadableStream not supported in this browser.");
+                
+                // Hide loading spinner instantly once stream begins
+                loadingState.classList.add("hidden");
+                resultPanel.classList.remove("hidden");
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let completeMarkdown = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    
+                    // Check for metadata packet
+                    if (chunk.includes("[METADATA]")) {
+                        const parts = chunk.split("[DELIMITER]");
+                        const metaStr = parts[0].replace("[METADATA]", "").trim();
+                        try {
+                            const metaJson = JSON.parse(metaStr);
+                            if (metaJson.cards && metaJson.cards.length > 0) {
+                                metaJson.cards.forEach((rest, idx) => {
+                                    const delay = idx * 0.15;
+                                    const primaryCuisine = rest.cuisines ? rest.cuisines.split(',')[0].trim() : 'food';
+                                    
+                                    // Phase 4: Live image generation based on Cuisine keyword
+                                    const imageUrl = `https://loremflickr.com/400/300/${encodeURIComponent(primaryCuisine)},food/all`;
+                                    
+                                    const cardHTML = `
+                                        <div class="restaurant-card image-card" style="animation-delay: ${delay}s">
+                                            <div class="card-image-wrapper">
+                                                <img src="${imageUrl}" class="card-image" alt="${primaryCuisine}" loading="lazy"/>
+                                            </div>
+                                            <div class="card-content-wrapper">
+                                                <h4>${rest.name}</h4>
+                                                <div class="card-meta">
+                                                    <span class="tag cuisine-tag">${primaryCuisine}</span>
+                                                    <span class="tag rating-tag">★ ${rest.rating || 'N/A'}</span>
+                                                </div>
+                                                <p class="cost-text">Cost for two: ₹${rest.cost || 'Unknown'}</p>
+                                            </div>
+                                        </div>
+                                    `;
+                                    cardsContainer.innerHTML += cardHTML;
+                                });
+                            } else {
+                                cardsContainer.innerHTML = `<div class="restaurant-card"><h4>No Verified Matches</h4><p>We restrict our AI from inventing fake restaurants outside the verified dataset.</p></div>`;
+                            }
+                        } catch(e) { console.error("Could not parse metadata", e); }
+                        
+                        // If there is streaming text attached after the delimiter, render it
+                        if (parts.length > 1 && parts[1]) {
+                            completeMarkdown += parts[1];
+                        }
+                    } else {
+                        // Standard text streaming chunk
+                        completeMarkdown += chunk;
+                    }
+
+                    // Render markdown boldly (simple live parser)
+                    let formattedText = completeMarkdown.replace(/\*\*([^*]+)\*\*/g, '<strong class="highlight">$1</strong>');
+                    formattedText = formattedText.replace(/\n\n/g, '<br><br>');
+                    formattedText = formattedText.replace(/\n/g, '<br>');
+                    aiResponseDiv.innerHTML = formattedText;
+                }
+                
+                setTimeout(() => {
+                    btn.style.transform = "scale(1)";
+                    btn.disabled = false;
+                }, 500);
+
+            } catch (err) {
+                loadingState.classList.add("hidden");
+                alert("Backend Stream Error: " + err.message);
+                btn.style.transform = "scale(1)";
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

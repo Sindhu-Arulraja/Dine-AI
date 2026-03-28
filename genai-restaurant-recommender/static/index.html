@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI Dining Concierge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="glow-orb left-orb"></div>
+    <div class="glow-orb right-orb"></div>
+
+    <main class="container">
+        <header>
+            <h1 class="glass-text">Dine<span class="accent">AI</span></h1>
+            <p class="subtitle">Your intelligent culinary concierge</p>
+        </header>
+
+        <section class="glass-panel search-card">
+            <h2>Find the perfect spot</h2>
+            <form id="recommendation-form" class="filter-grid">
+                <!-- Required -->
+                <div class="input-group">
+                    <label for="cuisine">Craving (Cuisine)</label>
+                    <input type="text" id="cuisine" placeholder="e.g. Italian, Sushi">
+                </div>
+                <div class="input-group">
+                    <label for="location">Location</label>
+                    <input type="text" id="location" placeholder="e.g. Downtown, Kormangala">
+                </div>
+                <!-- Optional -->
+                <div class="input-group">
+                    <label for="event">Event Vibe</label>
+                    <input type="text" id="event" placeholder="e.g. Romantic Date, Birthday (Optional)">
+                </div>
+                <div class="input-group">
+                    <label for="budget">Budget</label>
+                    <select id="budget">
+                        <option value="">Any Budget</option>
+                        <option value="low">$ - Cheap Eats</option>
+                        <option value="medium">$$ - Moderate</option>
+                        <option value="high">$$$ - Fine Dining</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="people">Party Size</label>
+                    <input type="number" id="people" placeholder="Optional" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="time">Time of Visit</label>
+                    <input type="time" id="time">
+                </div>
+                
+                <button type="submit" class="submit-btn" id="generate-btn">
+                    <span>Generate Magic</span>
+                    <div class="btn-glow"></div>
+                </button>
+            </form>
+        </section>
+
+        <section id="status-panel" class="glass-panel data-status-panel hidden">
+            <h3>Phase 1 System Check</h3>
+            <p id="system-status-text">Checking data pipeline...</p>
+            <pre id="data-sample"></pre>
+        </section>
+    </main>
+
+    <script>
+        // Phase 1 Simple Test Script
+        document.getElementById("recommendation-form").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const btn = document.getElementById("generate-btn");
+            btn.innerHTML = "<span>Analyzing Context...</span><div class='btn-glow'></div>";
+            btn.style.transform = "scale(0.95)";
+            
+            // Unhide status panel to test Phase 1 pipeline status
+            const statusPanel = document.getElementById("status-panel");
+            statusPanel.classList.remove("hidden");
+            statusPanel.style.animation = "fadeUp 0.6s ease forwards";
+
+            const locationVal = document.getElementById("location").value;
+            const cuisineVal = document.getElementById("cuisine").value;
+
+            fetch(`/api/search?location=${encodeURIComponent(locationVal)}&cuisine=${encodeURIComponent(cuisineVal)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === "success") {
+                        if (data.count > 0) {
+                            document.getElementById("system-status-text").innerHTML = `✅ Found <strong>${data.count}</strong> matching restaurants!`;
+                            document.getElementById("data-sample").textContent = "Top Results:\n" + JSON.stringify(data.results.slice(0, 3), null, 2);
+                        } else {
+                            document.getElementById("system-status-text").innerHTML = `⚠️ No restaurants found matching that criteria in the Phase 1 subset.`;
+                            document.getElementById("data-sample").textContent = "";
+                        }
+                    } else {
+                        document.getElementById("system-status-text").innerHTML = `❌ Error: ${data.message}`;
+                        document.getElementById("data-sample").textContent = "";
+                    }
+                    setTimeout(() => {
+                        btn.innerHTML = "<span>Generate Magic</span><div class='btn-glow'></div>";
+                        btn.style.transform = "scale(1)";
+                    }, 1500);
+                })
+                .catch(err => {
+                    document.getElementById("system-status-text").innerHTML = "❌ Backend API Unreachable.";
+                    btn.innerHTML = "<span>Retry</span><div class='btn-glow'></div>";
+                });
+        });
+    </script>
+</body>
+</html>
