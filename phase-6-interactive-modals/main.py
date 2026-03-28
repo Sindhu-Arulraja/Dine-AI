@@ -49,15 +49,16 @@ async def serve_results():
 
 @app.get("/api/debug")
 async def debug_endpoint():
+    import sys
     col = get_chroma_collection()
     if not col:
-        return {"status": "fatal", "message": "Failed to load Chroma collection completely. Check logs."}
+        return {"status": "fatal", "python_version": sys.version, "message": "Failed to load Chroma collection completely. Check logs."}
     
     try:
         count = col.count()
-        return {"status": "ok", "collection_name": col.name, "document_count": count, "path": os.path.join(BASE_DIR, "chroma_db")}
+        return {"status": "ok", "python_version": sys.version, "collection_name": col.name, "document_count": count, "path": os.path.join(BASE_DIR, "chroma_db")}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "python_version": sys.version, "message": str(e)}
 
 @app.get("/api/catalog-search")
 async def get_catalog(
