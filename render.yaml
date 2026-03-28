@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: dine-ai-recommender
+    env: python
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+    startCommand: "cd phase-6-interactive-modals && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    plan: free # Requests the free tier automatically
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
+      - key: GROQ_API_KEY
+        generateValue: true # Render will prompt you to replace this with your actual key
