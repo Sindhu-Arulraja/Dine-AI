@@ -159,6 +159,11 @@
                 
                 grid.classList.remove("hidden");
                 
+                if(data.status === "error") {
+                    grid.innerHTML = `<h3 style="color: #ef4444; text-align: center; width: 100%;">System Error:<br>${data.message || "Unknown Error"}</h3>`;
+                    return;
+                }
+                
                 if(data.status === "success" && data.cards && data.cards.length > 0) {
                     data.cards.forEach((rest, idx) => {
                         const delay = idx * 0.1;
@@ -190,10 +195,10 @@
                         grid.appendChild(card);
                     });
                 } else {
-                    grid.innerHTML = `<h3 style="color: white; text-align: center; width: 100%;">No Results Found.</h3>`;
+                    grid.innerHTML = `<h3 style="color: white; text-align: center; width: 100%;">No Results Found in Database.</h3>`;
                 }
             } catch (err) {
-                alert("API Search Failed!");
+                grid.innerHTML = `<h3 style="color: #ef4444; text-align: center; width: 100%;">API Connection Error. Verify Render is Online.</h3>`;
             }
         }
 
