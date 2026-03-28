@@ -32,7 +32,7 @@ def get_chroma_collection():
     try:
         # Prevent locking errors by relying on existing path
         client = chromadb.PersistentClient(path=os.path.join(BASE_DIR, "chroma_db"))
-        col = client.get_collection(name="blr_restaurants_v2", embedding_function=ef)
+        col = client.get_collection(name="restaurants", embedding_function=ef)
         return col
     except Exception as e:
         print("Vector DB connection error:", e)
