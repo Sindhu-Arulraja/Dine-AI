@@ -47,6 +47,18 @@ async def serve_index():
 async def serve_results():
     return FileResponse(os.path.join(BASE_DIR, "static", "results.html"))
 
+@app.get("/api/debug")
+async def debug_endpoint():
+    col = get_chroma_collection()
+    if not col:
+        return {"status": "fatal", "message": "Failed to load Chroma collection completely. Check logs."}
+    
+    try:
+        count = col.count()
+        return {"status": "ok", "collection_name": col.name, "document_count": count, "path": os.path.join(BASE_DIR, "chroma_db")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/api/catalog-search")
 async def get_catalog(
     cuisine: str = Query(""),
