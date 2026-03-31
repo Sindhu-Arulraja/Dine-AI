@@ -122,8 +122,27 @@ async def get_catalog(
 
     query_text = " ".join(search_terms) if search_terms else "Popular restaurant in Bangalore"
 
+    # LLM Optimized Search: Use Groq to understand the intent and expand keywords smartly
+    if search_terms and GROQ_API_KEY:
+        try:
+            client = Groq(api_key=GROQ_API_KEY)
+            llm_res = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a specialized semantic search optimizer for a restaurant database in Bangalore. The user passes search criteria. You must generate a single line of exactly 8 highly relevant, space-separated lowercase keywords/synonyms that would typically appear in restaurant descriptions, cuisines, and vibes matching their criteria. Do not converse. Just output keywords."},
+                    {"role": "user", "content": f"Optimize search semantics for: {query_text}"}
+                ],
+                model="llama-3.1-8b-instant",
+                temperature=0.3,
+                max_tokens=60
+            )
+            optimized_keywords = llm_res.choices[0].message.content.strip().replace(",", "")
+            query_text = query_text + " " + optimized_keywords
+            print("LLM Expanded Query:", query_text)
+        except Exception as e:
+            print("LLM keyword expansion failed:", e)
+
     try:
-        # Phase 5: Fetching pure 8 results for the UI grid, no LLM
+        # Phase 5: Fetching pure 8 results for the UI grid, smartly using LLM optimized string
         results = robust_search(query_text, 8)
         
         top_restaurants = []
