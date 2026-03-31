@@ -25,7 +25,25 @@ collection = None
 # Mount static folder
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
-ef = embedding_functions.DefaultEmbeddingFunction()
+class SafeRobustEmbeddingFunction(embedding_functions.EmbeddingFunction):
+    def __init__(self):
+        try:
+            self.ef = embedding_functions.DefaultEmbeddingFunction()
+        except:
+            self.ef = None
+
+    def __call__(self, input_texts):
+        if not self.ef:
+            return [[0.0] * 384 for _ in input_texts]
+        try:
+            res = self.ef(input_texts)
+            if isinstance(res, dict):
+                return [[0.0] * 384 for _ in input_texts]
+            return res
+        except Exception:
+            return [[0.0] * 384 for _ in input_texts]
+
+ef = SafeRobustEmbeddingFunction()
 
 # Add a robust function to load Chroma
 def get_chroma_collection():
@@ -37,6 +55,36 @@ def get_chroma_collection():
     except Exception as e:
         print("Vector DB connection error:", e)
         return None
+
+def safe_query(col, query_text, n_results=8):
+    try:
+        return col.query(query_texts=[query_text], n_results=n_results)
+    except Exception as e:
+        print(f"Fallback to text search triggered: {e}")
+        all_data = col.get()
+        docs = all_data.get('documents', []) or []
+        metas = all_data.get('metadatas', []) or []
+        
+        if not docs:
+             return {'documents': [[]], 'metadatas': [[]]}
+             
+        q_terms = [t.lower() for t in query_text.split() if len(t) > 2]
+        scored = []
+        for i, doc in enumerate(docs):
+            score = 0
+            doc_lower = (str(doc) or "").lower()
+            meta_lower = str(metas[i]).lower() if metas[i] else ""
+            for term in q_terms:
+                if term in doc_lower or term in meta_lower:
+                    score += 1
+            scored.append((score, i))
+            
+        scored.sort(reverse=True, key=lambda x: x[0])
+        top_indices = [idx for sc, idx in scored[:n_results]]
+        return {
+            'documents': [[docs[i] for i in top_indices]],
+            'metadatas': [[metas[i] for i in top_indices]]
+        }
 
 # Serve Frontend explicitly
 @app.get("/")
@@ -83,7 +131,7 @@ async def get_catalog(
 
     try:
         # Phase 5: Fetching pure 8 results for the UI grid, no LLM
-        results = col.query(query_texts=[query_text], n_results=8)
+        results = safe_query(col, query_text, 8)
         
         top_restaurants = []
         if results['documents'] and len(results['documents'][0]) > 0:
@@ -103,7 +151,7 @@ async def get_catalog(
 
         # If zero matches found explicitly, fallback search to ensure grid isn't empty
         if not top_restaurants:
-             fallback_res = col.query(query_texts=["best restaurants in bangalore"], n_results=8)
+             fallback_res = safe_query(col, "best restaurants in bangalore", 8)
              if fallback_res['documents'] and len(fallback_res['documents'][0]) > 0:
                  for i, doc in enumerate(fallback_res['documents'][0]):
                      meta = fallback_res['metadatas'][0][i]
@@ -136,7 +184,7 @@ async def ask_restaurant(name: str = Query(""), question: str = Query("")):
         # Perform specific vector search on the exact restaurant name to pull its specific reviews/metadata
         # We append name+question to hit the most relevant context vectors for this place
         search_query = f"{name} {question}"
-        results = col.query(query_texts=[search_query], n_results=1)
+        results = safe_query(col, search_query, 1)
         
         context_str = ""
         if results['documents'] and len(results['documents'][0]) > 0:
