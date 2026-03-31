@@ -2,8 +2,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import os
-import chromadb
-from chromadb.utils import embedding_functions
+import json
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -17,74 +16,73 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 app = FastAPI()
 
 os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-chroma_client = None
-collection = None
 
 # Mount static folder
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
-class SafeRobustEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __init__(self):
+ZOMATO_PATH = os.path.join(BASE_DIR, "..", "phase-2-groq-recommender", "zomato_subset.json")
+_RESTAURANT_CACHE = None
+
+def get_restaurant_data():
+    global _RESTAURANT_CACHE
+    if _RESTAURANT_CACHE is None:
         try:
-            self.ef = embedding_functions.DefaultEmbeddingFunction()
-        except:
-            self.ef = None
+            with open(ZOMATO_PATH, "r", encoding="utf-8") as f:
+                _RESTAURANT_CACHE = json.load(f)
+        except Exception as e:
+            print("Failed to load JSON:", e)
+            _RESTAURANT_CACHE = []
+    return _RESTAURANT_CACHE
 
-    def __call__(self, input_texts):
-        if not self.ef:
-            return [[0.0] * 384 for _ in input_texts]
-        try:
-            res = self.ef(input_texts)
-            if isinstance(res, dict):
-                return [[0.0] * 384 for _ in input_texts]
-            return res
-        except Exception:
-            return [[0.0] * 384 for _ in input_texts]
-
-ef = SafeRobustEmbeddingFunction()
-
-# Add a robust function to load Chroma
-def get_chroma_collection():
-    try:
-        # Prevent locking errors by relying on existing path
-        client = chromadb.PersistentClient(path=os.path.join(BASE_DIR, "chroma_db"))
-        col = client.get_collection(name="restaurants", embedding_function=ef)
-        return col
-    except Exception as e:
-        print("Vector DB connection error:", e)
-        return None
-
-def safe_query(col, query_text, n_results=8):
-    try:
-        return col.query(query_texts=[query_text], n_results=n_results)
-    except Exception as e:
-        print(f"Fallback to text search triggered: {e}")
-        all_data = col.get()
-        docs = all_data.get('documents', []) or []
-        metas = all_data.get('metadatas', []) or []
+def robust_search(query_text, n_results=8):
+    data = get_restaurant_data()
+    if not data:
+         return {'documents': [[]], 'metadatas': [[]]}
+         
+    q_terms = [t.lower() for t in query_text.split() if len(t) > 2]
+    
+    scored = []
+    for i, r in enumerate(data):
+        score = 0
+        name = str(r.get("name", "")).lower()
+        cuisine = str(r.get("cuisines", "")).lower()
+        loc = str(r.get("location", "")).lower()
         
-        if not docs:
-             return {'documents': [[]], 'metadatas': [[]]}
-             
-        q_terms = [t.lower() for t in query_text.split() if len(t) > 2]
-        scored = []
-        for i, doc in enumerate(docs):
-            score = 0
-            doc_lower = (str(doc) or "").lower()
-            meta_lower = str(metas[i]).lower() if metas[i] else ""
-            for term in q_terms:
-                if term in doc_lower or term in meta_lower:
-                    score += 1
-            scored.append((score, i))
-            
-        scored.sort(reverse=True, key=lambda x: x[0])
-        top_indices = [idx for sc, idx in scored[:n_results]]
-        return {
-            'documents': [[docs[i] for i in top_indices]],
-            'metadatas': [[metas[i] for i in top_indices]]
-        }
+        doc_str = f"{name} {cuisine} {loc}"
+        
+        for term in q_terms:
+            if term in doc_str:
+                score += 1
+        scored.append((score, i))
+        
+    scored.sort(reverse=True, key=lambda x: x[0])
+    top_indices = [idx for sc, idx in scored[:n_results]]
+    
+    docs = []
+    metas = []
+    for idx in top_indices:
+        r = data[idx]
+        name = str(r.get("name", "Unknown Restaurant"))
+        cuis = str(r.get("cuisines", "General"))
+        loc = str(r.get("location", ""))
+        cost = str(r.get("approx_cost(for two people)", "N/A"))
+        dl = str(r.get("dish_liked", ""))
+        rate = str(r.get("rate", "New"))
+        address = str(r.get("address", "Location not provided"))
+        phone = str(r.get("phone", "No contact number"))
+        votes = str(r.get("votes", "0"))
+        
+        docs.append(f"{name} is located in {loc}. They serve {cuis}. Dishes: {dl}")
+        metas.append({
+            "name": name,
+            "cuisines": cuis,
+            "cost": cost,
+            "rating": rate,
+            "address": address,
+            "phone": phone,
+            "votes": votes
+        })
+    return {'documents': [docs], 'metadatas': [metas]}
 
 # Serve Frontend explicitly
 @app.get("/")
@@ -98,15 +96,10 @@ async def serve_results():
 @app.get("/api/debug")
 async def debug_endpoint():
     import sys
-    col = get_chroma_collection()
-    if not col:
-        return {"status": "fatal", "python_version": sys.version, "message": "Failed to load Chroma collection completely. Check logs."}
-    
-    try:
-        count = col.count()
-        return {"status": "ok", "python_version": sys.version, "collection_name": col.name, "document_count": count, "path": os.path.join(BASE_DIR, "chroma_db")}
-    except Exception as e:
-        return {"status": "error", "python_version": sys.version, "message": str(e)}
+    data = get_restaurant_data()
+    if not data:
+        return {"status": "fatal", "python_version": sys.version, "message": "Failed to load JSON completely. Check logs."}
+    return {"status": "ok", "python_version": sys.version, "document_count": len(data), "path": ZOMATO_PATH}
 
 @app.get("/api/catalog-search")
 async def get_catalog(
@@ -117,9 +110,9 @@ async def get_catalog(
     people: str = Query(""),
     time: str = Query("")
 ):
-    col = get_chroma_collection()
-    if not col:
-         return JSONResponse(status_code=500, content={"status": "error", "message": "Vector Database not initialized."})
+    data = get_restaurant_data()
+    if not data:
+         return JSONResponse(status_code=500, content={"status": "error", "message": "Dataset not initialized."})
 
     search_terms = []
     if cuisine: search_terms.append(f"{cuisine} food")
@@ -131,14 +124,13 @@ async def get_catalog(
 
     try:
         # Phase 5: Fetching pure 8 results for the UI grid, no LLM
-        results = safe_query(col, query_text, 8)
+        results = robust_search(query_text, 8)
         
         top_restaurants = []
         if results['documents'] and len(results['documents'][0]) > 0:
             for i, doc in enumerate(results['documents'][0]):
                 meta = results['metadatas'][0][i]
                 
-                # We pull all possible UI data out of Chroma for the frontend popup modal
                 top_restaurants.append({
                     "name": meta.get('name', 'Unknown Restaurant'),
                     "cuisines": meta.get('cuisines', 'General'),
@@ -151,7 +143,7 @@ async def get_catalog(
 
         # If zero matches found explicitly, fallback search to ensure grid isn't empty
         if not top_restaurants:
-             fallback_res = safe_query(col, "best restaurants in bangalore", 8)
+             fallback_res = robust_search("best restaurants in bangalore", 8)
              if fallback_res['documents'] and len(fallback_res['documents'][0]) > 0:
                  for i, doc in enumerate(fallback_res['documents'][0]):
                      meta = fallback_res['metadatas'][0][i]
@@ -176,15 +168,13 @@ async def ask_restaurant(name: str = Query(""), question: str = Query("")):
     if not GROQ_API_KEY:
         return JSONResponse(status_code=500, content={"error": "GROQ_API_KEY missing from .env"})
 
-    col = get_chroma_collection()
-    if not col:
-         return JSONResponse(status_code=500, content={"error": "Vector Database missing."})
+    data = get_restaurant_data()
+    if not data:
+         return JSONResponse(status_code=500, content={"error": "Dataset missing."})
 
     try:
-        # Perform specific vector search on the exact restaurant name to pull its specific reviews/metadata
-        # We append name+question to hit the most relevant context vectors for this place
         search_query = f"{name} {question}"
-        results = safe_query(col, search_query, 1)
+        results = robust_search(search_query, 1)
         
         context_str = ""
         if results['documents'] and len(results['documents'][0]) > 0:
